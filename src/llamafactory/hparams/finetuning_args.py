@@ -13,7 +13,7 @@
 # limitations under the License.
 
 from dataclasses import asdict, dataclass, field
-from typing import Any, Literal, Optional
+from typing import Any, List, Literal, Optional, Union
 
 
 @dataclass
@@ -119,6 +119,51 @@ class LoraArguments:
     create_new_adapter: bool = field(
         default=False,
         metadata={"help": "Whether or not to create a new adapter with randomly initialized weight."},
+    )
+
+    # add support of QuanTA
+    use_quanta: bool = field(
+        default=False,
+        metadata={"help": "Whether or not to use the QuanTA method."}
+    )
+
+    ### configs of QuanTA
+    # quanta_d is used by "lora_rank"
+    # quanta_d: int = field(
+    #     default=1, 
+    #     metadata={"help": "quanta number of dimensions"}
+    # )
+    quanta_dropout: float = field(
+        default=0.0, 
+        metadata={"help": "quanta dropout"}
+    )
+    quanta_merge_weights: bool = field(
+        default=False,
+        metadata={"help": "Merge weights of the original model and the Lora model"}
+    )
+    quanta_fan_in_fan_out: bool = field(
+        default=False,
+        metadata={"help": "Set this to True if the layer to replace stores weight like (fan_in, fan_out)"}, 
+    )
+    quanta_per_dim_features: Optional[List[int]] = field(
+        default=None, 
+        metadata={"help": "List of the number of features per dimension. If not provided, the features are equally divided."}, 
+    )    
+    quanta_per_dim_features2: Optional[List[int]] = field(
+        default=None, 
+        metadata={"help": "List of the number of features per dimension for the output. If not provided, the features are set to per_dim_features."}, 
+    )    
+    quanta_sum_mode: bool = field(
+        default=False, 
+        metadata={"help": "Set this to True if the quanta is in sum mode"}
+    )
+    quanta_initialize_mode: str = field(
+        default="sum_opposite_freeze_one",
+        metadata={"help": "Initialization mode for the quanta weights. Can be 'sum_opposite_freeze_one'"}
+    )
+    quanta_bias: str = field(
+        default="none", 
+        metadata={"help": "Bias type for Lora. Can be 'none', 'all' or 'lora_only'"}
     )
 
 

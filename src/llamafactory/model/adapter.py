@@ -146,6 +146,7 @@ def _setup_lora_tuning(
     is_trainable: bool,
     cast_trainable_params_to_fp32: bool,
 ) -> "PeftModel":
+
     if is_trainable:
         logger.info_rank0("Fine-tuning method: {}".format("DoRA" if finetuning_args.use_dora else "LoRA"))
 
@@ -179,9 +180,28 @@ def _setup_lora_tuning(
             "token": model_args.hf_hub_token,
         }
 
-        for adapter in adapter_to_merge:
-            model: LoraModel = PeftModel.from_pretrained(model, adapter, **init_kwargs)
-            model = model.merge_and_unload()
+        for adapter in adapter_to_merge:            
+            if finetuning_args.use_quanta:
+                from quanta import QuanTAConfig, get_peft_model as get_quanta_model
+                from safetensors.torch import load_file
+                # resume model                
+                peft_config = QuanTAConfig(d=finetuning_args.lora_rank, 
+                                        quanta_dropout=finetuning_args.quanta_dropout, 
+                                        merge_weights=finetuning_args.quanta_merge_weights,
+                                        fan_in_fan_out=finetuning_args.quanta_fan_in_fan_out,
+                                        per_dim_features=finetuning_args.quanta_per_dim_features,
+                                        per_dim_features2=finetuning_args.quanta_per_dim_features2, 
+                                        target_modules=target_modules,
+                                        initialize_mode=finetuning_args.quanta_initialize_mode,  # set to default
+                                        bias=finetuning_args.quanta_bias,  # set to default
+                                        task_type="CAUSAL_LM")
+                
+                model = get_quanta_model(model, peft_config)
+                model.bfloat16()
+                model.load_state_dict(load_file(adapter + "/model.safetensors"), strict=False)
+            else:
+                model: LoraModel = PeftModel.from_pretrained(model, adapter, **init_kwargs)
+                model = model.merge_and_unload()
 
         if len(adapter_to_merge) > 0:
             logger.info_rank0(f"Merged {len(adapter_to_merge)} adapter(s).")
@@ -244,12 +264,26 @@ def _setup_lora_tuning(
                     logger.info_rank0(f"Using PiSSA initialization with FSVD steps {finetuning_args.pissa_iter}.")
                     peft_kwargs["init_lora_weights"] = f"pissa_niter_{finetuning_args.pissa_iter}"
 
-            lora_config = LoraConfig(
-                task_type=TaskType.CAUSAL_LM,
-                inference_mode=False,
-                **peft_kwargs,
-            )
-            model = get_peft_model(model, lora_config)
+            if finetuning_args.use_quanta:    
+                from quanta import QuanTAConfig, get_peft_model as get_quanta_model   
+                peft_config = QuanTAConfig(d=finetuning_args.quanta_d, 
+                                        quanta_dropout=finetuning_args.quanta_dropout, 
+                                        merge_weights=finetuning_args.quanta_merge_weights,
+                                        fan_in_fan_out=finetuning_args.quanta_fan_in_fan_out,
+                                        per_dim_features=finetuning_args.quanta_per_dim_features,
+                                        per_dim_features2=finetuning_args.quanta_per_dim_features2, 
+                                        target_modules=target_modules,
+                                        initialize_mode=finetuning_args.quanta_initialize_mode,  # set to default
+                                        bias=finetuning_args.quanta_bias,  # set to default
+                                        task_type="CAUSAL_LM")        
+                model = get_quanta_model(model, peft_config)
+            else:
+                lora_config = LoraConfig(
+                    task_type=TaskType.CAUSAL_LM,
+                    inference_mode=False,
+                    **peft_kwargs,
+                )
+                model = get_peft_model(model, lora_config)
 
     if is_trainable and cast_trainable_params_to_fp32:
         for param in filter(lambda p: p.requires_grad, model.parameters()):
