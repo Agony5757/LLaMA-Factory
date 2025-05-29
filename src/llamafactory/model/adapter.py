@@ -251,7 +251,17 @@ def _setup_lora_tuning(
             "use_rslora": finetuning_args.use_rslora,
             "use_dora": finetuning_args.use_dora,
             "modules_to_save": finetuning_args.additional_target,
+            "use_qpeft": finetuning_args.use_qpeft
         }
+
+        # Additional support of QPeFT
+        if finetuning_args.use_qpeft:
+            peft_kwargs.update(
+                {
+                    "qpeft_arch": finetuning_args.qpeft_arch,
+                    "qpeft_n_qlayers": finetuning_args.qpeft_n_qlayers
+                }
+            )
 
         if model_args.use_unsloth:
             model = get_unsloth_peft_model(model, model_args, peft_kwargs)

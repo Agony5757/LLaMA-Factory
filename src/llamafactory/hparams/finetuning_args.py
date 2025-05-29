@@ -127,6 +127,12 @@ class LoraArguments:
         metadata={"help": "Whether or not to use the QuanTA method."}
     )
 
+    # add support of QPeFT
+    use_qpeft: bool = field(
+        default=False,
+        metadata={"help": "Whether or not to use the QPeFT method."}
+    )
+
     ### configs of QuanTA
     # quanta_d is used by "lora_rank"
     # quanta_d: int = field(
@@ -164,6 +170,16 @@ class LoraArguments:
     quanta_bias: str = field(
         default="none", 
         metadata={"help": "Bias type for Lora. Can be 'none', 'all' or 'lora_only'"}
+    )
+    
+    ### configs of QPeFT
+    qpeft_arch : str = field(
+        default='ABC',
+        metadata={"help": "Optional QPeFT architecture. Available: ABC, AB, BC, A, B"}
+    )
+    qpeft_n_qlayers : Optional[int] = field(
+        default=None,
+        metadata={"help": "qpeft_n_qlayers (default = n_qubit = lora_rank)"}
     )
 
 
