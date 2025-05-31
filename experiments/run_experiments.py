@@ -3,7 +3,7 @@ import tempfile
 import subprocess
 import os
 import itertools # For product
-from typing import Dict, Any, List, Union
+from typing import Dict, Any, List, Optional, Union
 import time # For adding a small delay if needed
 
 # --- Configuration Generation (from previous response, slightly adapted) ---
@@ -14,18 +14,31 @@ def generate_output_dir(
     dataset_name: str, # Expects a single dataset name for path generation
     max_samples: int,
     finetuning_type: str,
+    finetuning_type_special: str,
+    qpeft_configs: str = "",
     lora_rank: Union[int, None] = None,
     lora_target: Union[str, List[str]] = "all",
     custom_suffix: str = ""
 ) -> str:
     """
     Generates a structured output directory path.
-    Example: {base_output_path}/{model_short_name}/{dataset_name}/samples_{max_samples}/{finetuning_type}_{target}_r{lora_rank}
+    Example: {base_output_path}/{lora_type}/{model_short_name}/{dataset_name}/samples_{max_samples}/{finetuning_type}_{target}_r{lora_rank}
     """
     model_short_name = os.path.basename(model_name_or_path).replace("/", "_") # Handle potential slashes
     
+    if finetuning_type_special == 'none':
+        lora_type = "lora"
+    elif finetuning_type_special == 'quanta':
+        lora_type = "quanta"
+    elif finetuning_type_special == 'qpeft':
+        lora_type = "qpeft_" + qpeft_configs
+        
+    else:
+        raise ValueError(f"Invalid finetuning_type_special: {finetuning_type_special}")
+
     path_parts = [
         base_output_path,
+        lora_type,
         model_short_name,
         dataset_name, # Assumes single dataset name for directory structure
         f"samples_{max_samples}",
@@ -55,10 +68,12 @@ def generate_training_config(
     finetuning_type: str = "lora", # e.g., "lora", "full"
     lora_rank: Union[int, None] = 4, # Made optional, set based on finetuning_type
     lora_target: Union[str, List[str]] = "all", 
-    use_quanta: bool = False,
+    finetuning_type_special: str = 'none',
+    qpeft_arch : str = 'ABC',
+    qpeft_n_qlayers : Optional[int] = None,
     
     # Output
-    base_output_path: str = "/mnt/share/qpeft/saves_scan", 
+    base_output_path: str = "/mnt/share/qpeft", 
     output_dir_suffix: str = "", 
     logging_steps: int = 1, # Increased for less verbose logs during scans
     save_steps: int = 100, # Potentially save less frequently during scans
@@ -102,12 +117,22 @@ def generate_training_config(
     else:
         primary_dataset_name = "unknown_dataset"
 
+    if finetuning_type_special == 'qpeft':
+        if qpeft_n_qlayers is None:
+            qpeft_configs = f"{qpeft_arch}_default"
+        else:
+            qpeft_configs = f"{qpeft_arch}_{qpeft_n_qlayers}"
+    else:
+        qpeft_configs = ""
+
     output_dir = generate_output_dir(
         base_output_path=base_output_path,
         model_name_or_path=model_name_or_path,
         dataset_name=primary_dataset_name,
         max_samples=max_samples,
         finetuning_type=finetuning_type,
+        finetuning_type_special=finetuning_type_special,
+        qpeft_configs=qpeft_configs,
         lora_rank=lora_rank if finetuning_type == "lora" else None,
         lora_target=lora_target, # Pass LR for output path
         custom_suffix=output_dir_suffix
@@ -120,7 +145,9 @@ def generate_training_config(
         "stage": stage,
         "do_train": True, 
         "finetuning_type": finetuning_type,
-        "use_quanta": use_quanta,
+        "save_safetensors": False,
+        "use_quanta": True if finetuning_type_special == 'quanta' else False,
+        "use_qpeft": True if finetuning_type_special == 'qpeft' else False,
         
         "dataset": dataset if isinstance(dataset, str) else ",".join(dataset), # LLaMA Factory expects comma-separated string
         "template": template,
@@ -163,8 +190,14 @@ def generate_training_config(
             config["lora_target"] = lora_target
     elif "lora_rank" in config: # Clean up if not lora
         del config["lora_rank"]
+
     if "lora_target" in config and finetuning_type != "lora":
         del config["lora_target"]
+
+    if finetuning_type_special == 'qpeft':
+        config['qpeft_arch'] = qpeft_arch
+        if qpeft_n_qlayers is not None:
+            config['qpeft_n_qlayers'] = qpeft_n_qlayers
             
     if resume_from_checkpoint:
         config["resume_from_checkpoint"] = resume_from_checkpoint
@@ -269,18 +302,17 @@ def scan_and_train(
             print(f"  Max samples: {training_params_dict.get('max_samples')}")
             print(f"  LoRA rank: {training_params_dict.get('lora_rank', 'N/A')}")
 
-
-            if dry_run:
-                print("Dry run: Skipping actual training execution.")
-                successful_runs +=1 # Count as success for dry run
-                continue
-
             # Check if output_dir already exists and overwrite_output_dir is False
             if not training_params_dict.get("overwrite_output_dir", True) and \
                os.path.exists(training_params_dict["output_dir"]) and \
                any(os.scandir(training_params_dict["output_dir"])): # Check if not empty
                 print(f"Skipping run: Output directory {training_params_dict['output_dir']} exists and is not empty, and overwrite_output_dir is False.")
                 # failed_runs +=1 # Or a new category like 'skipped_runs'
+                continue
+
+            if dry_run:
+                print("Dry run: Skipping actual training execution.")
+                successful_runs +=1 # Count as success for dry run
                 continue
             
             if run_llama_factory_training(training_params_dict, cli_command):
@@ -295,6 +327,7 @@ def scan_and_train(
             import traceback
             traceback.print_exc()
             failed_runs += 1
+            time.sleep(10) # Optional: Add a small delay between runs if needed
         
         print("-" * 70)
         # time.sleep(5) # Optional: Add a small delay between runs if needed
@@ -313,12 +346,20 @@ if __name__ == "__main__":
             "/mnt/share/Qwen3-1.7B",
             # "/mnt/share/AnotherModel-7B" # Example if you have another model
         ],
-        "max_samples": [300, 600, 1000, 3000],
+        "max_samples": [3000, 300, 600, 1000, ],
         "lora_rank": [4, 6, 8, 10],
         "learning_rate": [5.0e-4],
-        "use_quanta": [True],
+        "finetuning_type_special": [#'none',
+                                    # 'quanta',
+                                    'qpeft'
+                                    ],
         "dataset": ["CPsyCounD_eval", "medical_o1_sft_Chinese", "r1"],
-        "lora_target": ["q_proj,k_proj,v_proj", "q_proj,v_proj", "all"]
+        #"dataset": ["identity"],
+        #"lora_target": ["q_proj,k_proj,v_proj", "q_proj,v_proj", "all"]
+        #"lora_target": ["q_proj,v_proj", "q_proj,k_proj,v_proj", ],
+        "lora_target": ["q_proj,v_proj" ],
+        "qpeft_arch": ['B', 'A', 'AB', 'ABC', 'BC'],
+        #"qpeft_n_qlayers": [1,2,3,4],
         # "dataset": ["CPsyCounD", "another_dataset_name"] # If you want to scan datasets
     }
 
@@ -328,14 +369,14 @@ if __name__ == "__main__":
         "dataset": "CPsyCounD_eval", # Fixed dataset for this scan example
         "template": "qwen",
         "finetuning_type": "lora",
-        "use_quanta": False,
+        "finetuning_type_special": 'none',
         "lora_target": "q_proj,k_proj,v_proj",
         "num_train_epochs": 3.0, # Shorter epochs for scan illustration
         "per_device_train_batch_size": 4,
         "gradient_accumulation_steps": 4,
         "bf16": True,
-        "overwrite_output_dir": True, # Be careful with this for real scans
-        "base_output_path": "/mnt/share/qpeft/quanta", # Dedicated base for scans
+        "overwrite_output_dir": False, # Be careful with this for real scans
+        "base_output_path": "/mnt/share/qpeft", # Dedicated base for scans
         # "output_dir_suffix": "_initial_scan" # Add a common suffix for this set of scans
         "logging_steps": 1,
         "save_steps": 100, # Might not want to save checkpoints for every scan run or save less often
