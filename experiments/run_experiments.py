@@ -348,7 +348,7 @@ if __name__ == "__main__":
         ],
         "max_samples": [3000, 300, 600, 1000, ],
         "lora_rank": [4, 6, 8, 10],
-        "learning_rate": [5.0e-4],
+        "learning_rate": [5.0e-5],
         "finetuning_type_special": [#'none',
                                     # 'quanta',
                                     'qpeft'
@@ -372,8 +372,8 @@ if __name__ == "__main__":
         "finetuning_type_special": 'none',
         "lora_target": "q_proj,k_proj,v_proj",
         "num_train_epochs": 3.0, # Shorter epochs for scan illustration
-        "per_device_train_batch_size": 4,
-        "gradient_accumulation_steps": 4,
+        "per_device_train_batch_size": 2,
+        "gradient_accumulation_steps": 8,
         "bf16": True,
         "overwrite_output_dir": False, # Be careful with this for real scans
         "base_output_path": "/mnt/share/qpeft", # Dedicated base for scans

@@ -276,7 +276,7 @@ def _setup_lora_tuning(
 
             if finetuning_args.use_quanta:    
                 from quanta import QuanTAConfig, get_peft_model as get_quanta_model   
-                peft_config = QuanTAConfig(d=finetuning_args.quanta_d, 
+                peft_config = QuanTAConfig(d=finetuning_args.lora_rank, 
                                         quanta_dropout=finetuning_args.quanta_dropout, 
                                         merge_weights=finetuning_args.quanta_merge_weights,
                                         fan_in_fan_out=finetuning_args.quanta_fan_in_fan_out,
