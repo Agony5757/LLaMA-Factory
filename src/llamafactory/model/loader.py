@@ -140,6 +140,8 @@ def load_model(
         elif is_trainable:
             model = load_unsloth_pretrained_model(config, model_args)
 
+    print("model_args (load_model) = ", model_args.model_name_or_path)
+
     if model is None and not lazy_load:
         init_kwargs["config"] = config
         init_kwargs["pretrained_model_name_or_path"] = model_args.model_name_or_path

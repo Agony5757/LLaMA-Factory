@@ -15,6 +15,7 @@
 import re
 from typing import TYPE_CHECKING
 
+import quanta.peft_model
 import torch
 from peft import LoraConfig, LoraModel, PeftModel, TaskType, get_peft_model
 from transformers.integrations import is_deepspeed_zero3_enabled
@@ -183,7 +184,7 @@ def _setup_lora_tuning(
         for adapter in adapter_to_merge:            
             if finetuning_args.use_quanta:
                 from quanta import QuanTAConfig, get_peft_model as get_quanta_model
-                from safetensors.torch import load_file
+                # from safetensors.torch import load_file
                 # resume model                
                 peft_config = QuanTAConfig(d=finetuning_args.lora_rank, 
                                         quanta_dropout=finetuning_args.quanta_dropout, 
@@ -191,17 +192,36 @@ def _setup_lora_tuning(
                                         fan_in_fan_out=finetuning_args.quanta_fan_in_fan_out,
                                         per_dim_features=finetuning_args.quanta_per_dim_features,
                                         per_dim_features2=finetuning_args.quanta_per_dim_features2, 
-                                        target_modules=target_modules,
+                                        target_modules=finetuning_args.lora_target,
                                         initialize_mode=finetuning_args.quanta_initialize_mode,  # set to default
                                         bias=finetuning_args.quanta_bias,  # set to default
                                         task_type="CAUSAL_LM")
                 
                 model = get_quanta_model(model, peft_config)
                 model.bfloat16()
-                model.load_state_dict(load_file(adapter + "/model.safetensors"), strict=False)
+                model_state_dict = torch.load(adapter + "/pytorch_model.bin")
+                model.load_state_dict(model_state_dict, strict=False)
+                # import quanta
+                # import quanta.peft_model as quanta_model
+                # model = quanta_model.PeftModel.from_pretrained(model, adapter, **init_kwargs)
+                
+                # for name, param in model.named_parameters():
+                #     print(name, param.data.shape)
+                # print("[AGONY] 加载QuanTA权重")
             else:
                 model: LoraModel = PeftModel.from_pretrained(model, adapter, **init_kwargs)
-                model = model.merge_and_unload()
+                
+                if finetuning_args.use_qpeft == True:
+                    # Use QPeFT model
+                    # 打印模型的所有权重
+                    for name, param in model.named_parameters():
+                        print(name, param.data.shape)
+                        
+                    print("[AGONY] 加载量子微调部分权重")
+                    model.bfloat16()
+                    # exit()
+                else:
+                    model = model.merge_and_unload()
 
         if len(adapter_to_merge) > 0:
             logger.info_rank0(f"Merged {len(adapter_to_merge)} adapter(s).")
