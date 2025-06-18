@@ -78,6 +78,14 @@ def run_sft(
     gen_kwargs["eos_token_id"] = [tokenizer.eos_token_id] + tokenizer.additional_special_tokens_ids
     gen_kwargs["pad_token_id"] = tokenizer.pad_token_id
 
+    callbacks = callbacks if callbacks is not None else []
+
+    if finetuning_args.qpeft_log_callback:
+        if finetuning_args.finetuning_type == 'lora' and finetuning_args.use_qpeft:
+            if finetuning_args.qpeft_arch in ['ABC', 'BC']:
+                from peft.tuners.lora import QPeftLogCallback
+                callbacks.append(QPeftLogCallback(finetuning_args.qpeft_arch))
+
     # Initialize our Trainer
     trainer = CustomSeq2SeqTrainer(
         model=model,
