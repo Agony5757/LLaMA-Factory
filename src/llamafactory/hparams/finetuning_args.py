@@ -177,9 +177,17 @@ class LoraArguments:
         default='ABC',
         metadata={"help": "Optional QPeFT architecture. Available: ABC, AB, BC, A, B"}
     )
-    qpeft_n_qlayers : Optional[int] = field(
+    qpeft_qcircuit_layers : Optional[int] = field(
         default=None,
-        metadata={"help": "qpeft_n_qlayers (default = n_qubit = lora_rank)"}
+        metadata={"help": "qpeft_qcircuit_layers (default = n_qubit = lora_rank)"}
+    )
+    qpeft_log_callback : bool = field(
+        default=False,
+        metadata={"help": "Whether or not to use QPeftLogCallback. See train.sft.workflow.run_sft (line 87)."}
+    )
+    qpeft_classical_layers : Optional[str] = field(
+        default=None,
+        metadata={"help": "Specify a list of layers will not use qpeft."}
     )
 
 

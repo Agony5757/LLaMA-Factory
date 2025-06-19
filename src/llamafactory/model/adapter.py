@@ -276,10 +276,21 @@ def _setup_lora_tuning(
 
         # Additional support of QPeFT
         if finetuning_args.use_qpeft:
+            # print(
+            #     {
+            #         "qpeft_arch": finetuning_args.qpeft_arch,
+            #         "qpeft_qcircuit_layers": finetuning_args.qpeft_qcircuit_layers,
+            #         "qpeft_log_callback": finetuning_args.qpeft_log_callback,
+            #         "qpeft_classical_layers": finetuning_args.qpeft_classical_layers,
+            #     })
+            
+            # input()
             peft_kwargs.update(
                 {
                     "qpeft_arch": finetuning_args.qpeft_arch,
-                    "qpeft_n_qlayers": finetuning_args.qpeft_n_qlayers
+                    "qpeft_qcircuit_layers": finetuning_args.qpeft_qcircuit_layers,
+                    "qpeft_log_callback": finetuning_args.qpeft_log_callback,
+                    "qpeft_classical_layers": finetuning_args.qpeft_classical_layers,
                 }
             )
 
